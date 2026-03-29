@@ -59,6 +59,9 @@ Tested with **Codex** and **Claude**. Should also work with **LMStudio**, **Open
 - **Screenshot** (`godot_screenshot`) : Uses Godot's built-in movie writer to capture the last rendered PNG frame after running for a short duration.
 
 - **Search Docs** (`godot_search_docs`) : Searches a cached API dump generated from the selected Godot executable, so results stay aligned with the installed engine version.
+- **Add WorldEnvironment** (`godot_add_world_environment`) : Adds a WorldEnvironment node and applies Environment and node-level parameter updates in one call.
+
+- **Update WorldEnvironment** (`godot_update_world_environment`) : Updates an existing WorldEnvironment node's Environment settings (fog, tonemap, ambient light, background, etc.) and selected node properties.
 
 The server also exposes MCP resource discovery over stdio, so clients can inspect a static tool catalog resource and a per-tool detail template without needing to call the tools first.
 
