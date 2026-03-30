@@ -544,6 +544,105 @@ class GodotMcpServer:
                 ),
             ),
             ToolDefinition(
+                name="godot_add_world_environment",
+                description="Add a WorldEnvironment node to a saved scene and optionally set node and Environment parameters in one call.",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "project_path": {
+                            "type": "string",
+                            "description": "Path to the Godot project directory or its project.godot file.",
+                        },
+                        "scene_path": {
+                            "type": "string",
+                            "description": "Path to the target .tscn file. Absolute, relative, and res:// paths are supported.",
+                        },
+                        "parent_path": {
+                            "type": "string",
+                            "description": "Scene-relative node path where the WorldEnvironment node should be attached. Use '.' for the root.",
+                            "default": ".",
+                        },
+                        "node_name": {
+                            "type": "string",
+                            "description": "Optional explicit WorldEnvironment node name. Defaults to 'WorldEnvironment'.",
+                            "default": "WorldEnvironment",
+                        },
+                        "environment_parameters": {
+                            "type": "object",
+                            "description": "Optional Environment property updates to apply, such as background_color, ambient_light_energy, tonemap_mode, or fog_enabled.",
+                        },
+                        "node_parameters": {
+                            "type": "object",
+                            "description": "Optional WorldEnvironment node property updates (excluding the `environment` resource itself).",
+                        },
+                        "godot_executable": {
+                            "type": "string",
+                            "description": "Optional explicit path to the Godot executable or .app bundle.",
+                        },
+                    },
+                    "required": ["project_path", "scene_path"],
+                    "additionalProperties": False,
+                },
+                handler=lambda args: self.controller.add_world_environment(
+                    project_path=args["project_path"],
+                    scene_path=args["scene_path"],
+                    parent_path=args.get("parent_path", "."),
+                    node_name=args.get("node_name", "WorldEnvironment"),
+                    environment_parameters=args.get("environment_parameters"),
+                    node_parameters=args.get("node_parameters"),
+                    godot_executable=args.get("godot_executable"),
+                ),
+            ),
+            ToolDefinition(
+                name="godot_update_world_environment",
+                description="Update an existing WorldEnvironment node by editing its node properties and/or Environment resource parameters.",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "project_path": {
+                            "type": "string",
+                            "description": "Path to the Godot project directory or its project.godot file.",
+                        },
+                        "scene_path": {
+                            "type": "string",
+                            "description": "Path to the target .tscn file. Absolute, relative, and res:// paths are supported.",
+                        },
+                        "node_path": {
+                            "type": "string",
+                            "description": "Scene-relative path to the WorldEnvironment node to update.",
+                        },
+                        "environment_parameters": {
+                            "type": "object",
+                            "description": "Environment property updates to apply, such as background_color, ambient_light_energy, tonemap_mode, or fog_enabled.",
+                        },
+                        "node_parameters": {
+                            "type": "object",
+                            "description": "WorldEnvironment node property updates (excluding the `environment` resource itself).",
+                        },
+                        "create_environment_if_missing": {
+                            "type": "boolean",
+                            "description": "Whether to create a new Environment resource when the target node has none.",
+                            "default": True,
+                        },
+                        "godot_executable": {
+                            "type": "string",
+                            "description": "Optional explicit path to the Godot executable or .app bundle.",
+                        },
+                    },
+                    "required": ["project_path", "scene_path", "node_path"],
+                    "additionalProperties": False,
+                },
+                handler=lambda args: self.controller.update_world_environment(
+                    project_path=args["project_path"],
+                    scene_path=args["scene_path"],
+                    node_path=args["node_path"],
+                    environment_parameters=args.get("environment_parameters"),
+                    node_parameters=args.get("node_parameters"),
+                    create_environment_if_missing=bool(args.get("create_environment_if_missing", True)),
+                    godot_executable=args.get("godot_executable"),
+                ),
+            ),
+            ToolDefinition(
                 name="godot_add_primitive_mesh",
                 description="Add a MeshInstance3D with a built-in PrimitiveMesh resource such as BoxMesh, CylinderMesh, SphereMesh, CapsuleMesh, PlaneMesh, PrismMesh, QuadMesh, or TorusMesh.",
                 input_schema={

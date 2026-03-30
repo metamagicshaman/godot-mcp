@@ -1288,6 +1288,188 @@ class GodotController:
             "godot_version": version,
         }
 
+    def add_world_environment(
+        self,
+        project_path: str,
+        scene_path: str,
+        parent_path: str = ".",
+        node_name: str = "WorldEnvironment",
+        environment_parameters: dict[str, Any] | None = None,
+        node_parameters: dict[str, Any] | None = None,
+        godot_executable: str | None = None,
+    ) -> dict[str, Any]:
+        project_dir = ensure_project_path(project_path)
+        executable, version = resolve_godot_executable(godot_executable)
+        absolute_scene_path, resource_scene_path = resolve_scene_path(project_dir, scene_path)
+
+        if not absolute_scene_path.exists():
+            raise GodotError(f"Scene not found: {absolute_scene_path}")
+
+        normalized_parent_path = normalize_scene_node_path(parent_path)
+        final_node_name = node_name.strip() if node_name is not None else ""
+        if not final_node_name:
+            raise GodotError("`node_name` must not be empty.")
+
+        final_environment_parameters = environment_parameters or {}
+        if not isinstance(final_environment_parameters, dict):
+            raise GodotError("`environment_parameters` must be an object when provided.")
+        final_node_parameters = node_parameters or {}
+        if not isinstance(final_node_parameters, dict):
+            raise GodotError("`node_parameters` must be an object when provided.")
+
+        payload = {
+            "environment_parameters": final_environment_parameters,
+            "node_parameters": final_node_parameters,
+        }
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                suffix="-godot-world-environment-add.json",
+                delete=False,
+            ) as handle:
+                json.dump(payload, handle, ensure_ascii=False)
+                config_path = handle.name
+        except TypeError as exc:
+            raise GodotError(
+                "`environment_parameters` or `node_parameters` contains a value that could not be serialized to JSON."
+            ) from exc
+
+        try:
+            output = _run_godot_script(
+                executable=executable,
+                project_dir=project_dir,
+                script_name="add_world_environment.gd",
+                user_args=[
+                    "--scene-path",
+                    resource_scene_path,
+                    "--parent-path",
+                    normalized_parent_path,
+                    "--node-name",
+                    final_node_name,
+                    "--config-path",
+                    config_path,
+                ],
+            )
+        finally:
+            Path(config_path).unlink(missing_ok=True)
+
+        parsed = _parse_script_json_output(output, "add_world_environment.gd")
+        supported_node_parameters = parsed.get("supported_node_parameters", [])
+        supported_environment_parameters = parsed.get("supported_environment_parameters", [])
+        if not isinstance(supported_node_parameters, list):
+            raise GodotError("WorldEnvironment creation did not return a supported node parameter list.")
+        if not isinstance(supported_environment_parameters, list):
+            raise GodotError("WorldEnvironment creation did not return a supported environment parameter list.")
+
+        return {
+            "project_path": str(project_dir),
+            "scene_path": str(absolute_scene_path),
+            "scene_resource_path": resource_scene_path,
+            "parent_path": parsed.get("parent_path", normalized_parent_path),
+            "node_path": parsed.get("node_path"),
+            "node_name": parsed.get("node_name", final_node_name),
+            "node_type": parsed.get("node_type", "WorldEnvironment"),
+            "environment_created": bool(parsed.get("environment_created", True)),
+            "node_parameters": parsed.get("node_parameters", {}),
+            "environment_parameters": parsed.get("environment_parameters", {}),
+            "updated_node_parameters": parsed.get("updated_node_parameters", []),
+            "updated_environment_parameters": parsed.get("updated_environment_parameters", []),
+            "supported_node_parameters": supported_node_parameters,
+            "supported_environment_parameters": supported_environment_parameters,
+            "godot_executable": str(executable),
+            "godot_version": version,
+        }
+
+    def update_world_environment(
+        self,
+        project_path: str,
+        scene_path: str,
+        node_path: str,
+        environment_parameters: dict[str, Any] | None = None,
+        node_parameters: dict[str, Any] | None = None,
+        create_environment_if_missing: bool = True,
+        godot_executable: str | None = None,
+    ) -> dict[str, Any]:
+        project_dir = ensure_project_path(project_path)
+        executable, version = resolve_godot_executable(godot_executable)
+        absolute_scene_path, resource_scene_path = resolve_scene_path(project_dir, scene_path)
+
+        if not absolute_scene_path.exists():
+            raise GodotError(f"Scene not found: {absolute_scene_path}")
+
+        normalized_node_path = normalize_scene_node_path(node_path)
+        final_environment_parameters = environment_parameters or {}
+        if not isinstance(final_environment_parameters, dict):
+            raise GodotError("`environment_parameters` must be an object when provided.")
+        final_node_parameters = node_parameters or {}
+        if not isinstance(final_node_parameters, dict):
+            raise GodotError("`node_parameters` must be an object when provided.")
+        if not final_environment_parameters and not final_node_parameters:
+            raise GodotError("Provide at least one of `environment_parameters` or `node_parameters`.")
+
+        payload = {
+            "environment_parameters": final_environment_parameters,
+            "node_parameters": final_node_parameters,
+            "create_environment_if_missing": bool(create_environment_if_missing),
+        }
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                suffix="-godot-world-environment-update.json",
+                delete=False,
+            ) as handle:
+                json.dump(payload, handle, ensure_ascii=False)
+                config_path = handle.name
+        except TypeError as exc:
+            raise GodotError(
+                "`environment_parameters` or `node_parameters` contains a value that could not be serialized to JSON."
+            ) from exc
+
+        try:
+            output = _run_godot_script(
+                executable=executable,
+                project_dir=project_dir,
+                script_name="update_world_environment.gd",
+                user_args=[
+                    "--scene-path",
+                    resource_scene_path,
+                    "--node-path",
+                    normalized_node_path,
+                    "--config-path",
+                    config_path,
+                ],
+            )
+        finally:
+            Path(config_path).unlink(missing_ok=True)
+
+        parsed = _parse_script_json_output(output, "update_world_environment.gd")
+        supported_node_parameters = parsed.get("supported_node_parameters", [])
+        supported_environment_parameters = parsed.get("supported_environment_parameters", [])
+        if not isinstance(supported_node_parameters, list):
+            raise GodotError("WorldEnvironment update did not return a supported node parameter list.")
+        if not isinstance(supported_environment_parameters, list):
+            raise GodotError("WorldEnvironment update did not return a supported environment parameter list.")
+
+        return {
+            "project_path": str(project_dir),
+            "scene_path": str(absolute_scene_path),
+            "scene_resource_path": resource_scene_path,
+            "node_path": parsed.get("node_path", normalized_node_path),
+            "node_name": parsed.get("node_name"),
+            "node_type": parsed.get("node_type", "WorldEnvironment"),
+            "environment_created": bool(parsed.get("environment_created", False)),
+            "node_parameters": parsed.get("node_parameters", {}),
+            "environment_parameters": parsed.get("environment_parameters", {}),
+            "updated_node_parameters": parsed.get("updated_node_parameters", []),
+            "updated_environment_parameters": parsed.get("updated_environment_parameters", []),
+            "supported_node_parameters": supported_node_parameters,
+            "supported_environment_parameters": supported_environment_parameters,
+            "godot_executable": str(executable),
+            "godot_version": version,
+        }
+
     def add_primitive_mesh(
         self,
         project_path: str,
