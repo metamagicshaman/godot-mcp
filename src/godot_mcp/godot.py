@@ -777,6 +777,9 @@ def _scan_project_resources(project_dir: Path, root_dir: Path) -> dict[str, list
 _PROFILER_AUTOLOAD_KEY = "_GodotMcpProfiler"
 _PROFILER_SCRIPT_NAME = "profiler.gd"
 
+_CAMERA_CONTROLLER_AUTOLOAD_KEY = "_GodotMcpCameraController"
+_CAMERA_CONTROLLER_SCRIPT_NAME = "camera_controller.gd"
+
 
 def _inject_profiler_autoload(project_dir: Path) -> tuple[Path, str]:
     src = Path(__file__).resolve().parent / "templates" / _PROFILER_SCRIPT_NAME
@@ -805,6 +808,40 @@ def _inject_profiler_autoload(project_dir: Path) -> tuple[Path, str]:
 
 
 def _remove_profiler_autoload(
+    project_dir: Path, original_content: str, script_dest: Path
+) -> None:
+    project_file = project_dir / "project.godot"
+    project_file.write_text(original_content, encoding="utf-8")
+    script_dest.unlink(missing_ok=True)
+
+
+def _inject_camera_controller_autoload(project_dir: Path) -> tuple[Path, str]:
+    src = Path(__file__).resolve().parent / "templates" / _CAMERA_CONTROLLER_SCRIPT_NAME
+    if not src.exists():
+        raise GodotError(f"Missing camera controller helper script: {src}")
+
+    dest_dir = project_dir / ".godot-mcp"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / _CAMERA_CONTROLLER_SCRIPT_NAME
+    shutil.copy2(src, dest)
+
+    project_file = project_dir / "project.godot"
+    original_content = project_file.read_text(encoding="utf-8")
+
+    autoload_line = f'{_CAMERA_CONTROLLER_AUTOLOAD_KEY}="*res://.godot-mcp/{_CAMERA_CONTROLLER_SCRIPT_NAME}"'
+
+    if "[autoload]" in original_content:
+        modified = original_content.replace(
+            "[autoload]", f"[autoload]\n\n{autoload_line}", 1
+        )
+    else:
+        modified = original_content.rstrip() + f"\n\n[autoload]\n\n{autoload_line}\n"
+
+    project_file.write_text(modified, encoding="utf-8")
+    return dest, original_content
+
+
+def _remove_camera_controller_autoload(
     project_dir: Path, original_content: str, script_dest: Path
 ) -> None:
     project_file = project_dir / "project.godot"
@@ -2738,6 +2775,240 @@ class GodotController:
             "stderr_truncated": stderr_truncated,
             "log_output_truncated": log_truncated,
             "debug_output": debug_output,
+            "godot_version": version,
+        }
+
+    def record_video(
+        self,
+        project_path: str,
+        scene_path: str | None = None,
+        duration: float = 5.0,
+        fps: int = 30,
+        resolution: dict[str, int] | None = None,
+        camera_waypoints: list[dict[str, Any]] | None = None,
+        camera_node_path: str | None = None,
+        godot_executable: str | None = None,
+    ) -> dict[str, Any]:
+        project_dir = ensure_project_path(project_path)
+        executable, version = resolve_godot_executable(godot_executable)
+
+        if duration <= 0:
+            raise GodotError("`duration` must be greater than 0.")
+        if fps < 1:
+            raise GodotError("`fps` must be at least 1.")
+
+        ffmpeg_path = shutil.which("ffmpeg")
+        if ffmpeg_path is None:
+            raise GodotError(
+                "ffmpeg is required but was not found on PATH. "
+                "Install ffmpeg and try again."
+            )
+
+        absolute_scene_path: Path | None = None
+        resource_scene_path: str | None = None
+        run_target = "project"
+        scene_label = "project"
+
+        command: list[str] = [
+            str(executable),
+            "--path",
+            str(project_dir),
+            "--windowed",
+            "--fixed-fps",
+            str(fps),
+            "--disable-vsync",
+        ]
+
+        if scene_path:
+            absolute_scene_path, resource_scene_path = resolve_scene_path(project_dir, scene_path)
+            if not absolute_scene_path.exists():
+                raise GodotError(f"Scene not found: {absolute_scene_path}")
+            relative_scene_path = absolute_scene_path.relative_to(project_dir).as_posix()
+            command.extend(["--scene", relative_scene_path])
+            run_target = "scene"
+            scene_label = absolute_scene_path.stem
+
+        # Apply custom resolution
+        if resolution:
+            width = resolution.get("width", 1920)
+            height = resolution.get("height", 1080)
+            command.extend([
+                "--resolution",
+                f"{width}x{height}",
+            ])
+
+        frame_count = max(1, int(round(duration * fps)))
+
+        recordings_dir = project_dir / ".godot-mcp" / "recordings"
+        recordings_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        stem = f"{timestamp}-{run_target}-{snake_case_name(scene_label, default=run_target)}"
+        movie_output_path = recordings_dir / f"{stem}.png"
+        final_video_path = recordings_dir / f"{stem}.mp4"
+        log_path = _create_log_path(project_dir, "record-video")
+
+        injected_autoload = False
+        original_project_content: str | None = None
+        camera_script_dest: Path | None = None
+        waypoints_file_path: str | None = None
+
+        try:
+            if camera_waypoints:
+                camera_script_dest, original_project_content = _inject_camera_controller_autoload(
+                    project_dir
+                )
+                injected_autoload = True
+
+                with tempfile.NamedTemporaryFile(
+                    mode="w",
+                    encoding="utf-8",
+                    suffix="-godot-camera-waypoints.json",
+                    delete=False,
+                ) as handle:
+                    json.dump(camera_waypoints, handle, ensure_ascii=False)
+                    waypoints_file_path = handle.name
+
+            command_with_capture = [
+                command[0],
+                "--log-file",
+                str(log_path),
+                *command[1:],
+                "--write-movie",
+                str(movie_output_path),
+                "--quit-after",
+                str(frame_count),
+            ]
+
+            if camera_waypoints:
+                camera_args = [
+                    "--",
+                    "--camera-duration",
+                    str(duration),
+                ]
+                if waypoints_file_path:
+                    camera_args.extend(["--waypoints-path", waypoints_file_path])
+                if camera_node_path:
+                    camera_args.extend(["--camera-node-path", camera_node_path])
+                command_with_capture.extend(camera_args)
+
+            timeout_seconds = max(120, int(duration * 20) + 60)
+            result = subprocess.run(
+                command_with_capture,
+                cwd=project_dir,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds,
+            )
+
+        finally:
+            if injected_autoload and original_project_content is not None and camera_script_dest is not None:
+                _remove_camera_controller_autoload(project_dir, original_project_content, camera_script_dest)
+            if waypoints_file_path:
+                Path(waypoints_file_path).unlink(missing_ok=True)
+
+        frame_files = sorted(recordings_dir.glob(f"{stem}" + "[0-9]" * 8 + ".png"))
+        if not frame_files and movie_output_path.exists():
+            frame_files = [movie_output_path]
+
+        wav_path = recordings_dir / f"{stem}.wav"
+
+        if result.returncode != 0 or not frame_files:
+            details = "\n".join(
+                part for part in [result.stdout.strip(), result.stderr.strip()] if part
+            ).strip()
+            raise GodotError(
+                "Failed to capture video frames from Godot.\n"
+                f"Log file: {log_path}\n"
+                f"{details or 'No output was returned.'}"
+            )
+
+        
+        frame_pattern = str(recordings_dir / f"{stem}%08d.png")
+
+        ffmpeg_command: list[str] = [
+            ffmpeg_path,
+            "-y",
+            "-framerate",
+            str(fps),
+            "-i",
+            frame_pattern,
+        ]
+
+        if wav_path.exists() and wav_path.stat().st_size > 0:
+            ffmpeg_command.extend([
+                "-i",
+                str(wav_path),
+                "-c:v",
+                "libx264",
+                "-preset",
+                "medium",
+                "-crf",
+                "23",
+                "-pix_fmt",
+                "yuv420p",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "192k",
+                "-shortest",
+            ])
+        else:
+            ffmpeg_command.extend([
+                "-c:v",
+                "libx264",
+                "-preset",
+                "medium",
+                "-crf",
+                "23",
+                "-pix_fmt",
+                "yuv420p",
+            ])
+
+        ffmpeg_command.append(str(final_video_path))
+
+        ffmpeg_result = subprocess.run(
+            ffmpeg_command,
+            cwd=recordings_dir,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+
+        if ffmpeg_result.returncode != 0:
+            details = ffmpeg_result.stderr.strip()
+            raise GodotError(
+                "ffmpeg failed to encode the video.\n"
+                f"{details or 'No output was returned.'}"
+            )
+
+        has_audio = wav_path.exists() and wav_path.stat().st_size > 0
+
+        # Clean up 
+        for frame_path in frame_files:
+            frame_path.unlink(missing_ok=True)
+        movie_output_path.unlink(missing_ok=True)
+        wav_path.unlink(missing_ok=True)
+
+        video_size = final_video_path.stat().st_size if final_video_path.exists() else 0
+
+        return {
+            "project_path": str(project_dir),
+            "scene_path": str(absolute_scene_path) if absolute_scene_path is not None else None,
+            "scene_resource_path": resource_scene_path,
+            "run_target": run_target,
+            "duration": duration,
+            "fps": fps,
+            "frame_count": frame_count,
+            "video_path": str(final_video_path),
+            "video_format": "mp4",
+            "video_size_bytes": video_size,
+            "has_audio": has_audio,
+            "camera_waypoints_count": len(camera_waypoints) if camera_waypoints else 0,
+            "command": command_with_capture,
+            "log_path": str(log_path),
+            "godot_executable": str(executable),
             "godot_version": version,
         }
 

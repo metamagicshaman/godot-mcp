@@ -1164,6 +1164,103 @@ class GodotMcpServer:
                 ),
             ),
             ToolDefinition(
+                name="godot_record_video",
+                description=(
+                    "Record an MP4 video with audio of a Godot project or scene."
+                    "Optionally animate the camera along AI-defined waypoints."
+                    "Requires ffmpeg to be installed."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "project_path": {
+                            "type": "string",
+                            "description": "Path to the Godot project directory or its project.godot file.",
+                        },
+                        "scene_path": {
+                            "type": "string",
+                            "description": "Optional scene to record instead of the project's configured main scene.",
+                        },
+                        "duration": {
+                            "type": "number",
+                            "description": "How many seconds of video to record.",
+                            "default": 5.0,
+                            "minimum": 0.5,
+                        },
+                        "fps": {
+                            "type": "integer",
+                            "description": "Frames per second for the recording.",
+                            "default": 30,
+                            "minimum": 1,
+                            "maximum": 120,
+                        },
+                        "resolution": {
+                            "type": "object",
+                            "description": "Video resolution. Example: {\"width\": 1920, \"height\": 1080}.",
+                            "properties": {
+                                "width": {"type": "integer", "default": 1920},
+                                "height": {"type": "integer", "default": 1080},
+                            },
+                        },
+                        "camera_waypoints": {
+                            "type": "array",
+                            "description": (
+                                "Array of camera waypoints for animated camera movement. "
+                                "Each waypoint is an object with: "
+                                "position ({x,y,z}), rotation_degrees ({x,y,z}), "
+                                "time (seconds into recording), fov (optional). "
+                                "The camera smoothly interpolates between waypoints. "
+                                "If time is omitted, waypoints are evenly distributed across the duration."
+                            ),
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "position": {
+                                        "type": "object",
+                                        "description": "Camera position {x, y, z}.",
+                                    },
+                                    "rotation_degrees": {
+                                        "type": "object",
+                                        "description": "Camera rotation in degrees {x, y, z}.",
+                                    },
+                                    "time": {
+                                        "type": "number",
+                                        "description": "Time in seconds when the camera should reach this waypoint.",
+                                    },
+                                    "fov": {
+                                        "type": "number",
+                                        "description": "Camera field of view at this waypoint.",
+                                    },
+                                },
+                            },
+                        },
+                        "camera_node_path": {
+                            "type": "string",
+                            "description": (
+                                "Path to an existing Camera3D node in the scene to animate. "
+                                "If omitted, the controller will find the first Camera3D automatically."
+                            ),
+                        },
+                        "godot_executable": {
+                            "type": "string",
+                            "description": "Optional explicit path to the Godot executable or .app bundle.",
+                        },
+                    },
+                    "required": ["project_path"],
+                    "additionalProperties": False,
+                },
+                handler=lambda args: self.controller.record_video(
+                    project_path=args["project_path"],
+                    scene_path=args.get("scene_path"),
+                    duration=float(args.get("duration", 5.0)),
+                    fps=int(args.get("fps", 30)),
+                    resolution=args.get("resolution"),
+                    camera_waypoints=args.get("camera_waypoints"),
+                    camera_node_path=args.get("camera_node_path"),
+                    godot_executable=args.get("godot_executable"),
+                ),
+            ),
+            ToolDefinition(
                 name="godot_screenshot",
                 description="Run a Godot project or specific scene for a short duration, keep the last rendered frame, and return the screenshot path.",
                 input_schema={
