@@ -1166,9 +1166,10 @@ class GodotMcpServer:
             ToolDefinition(
                 name="godot_record_video",
                 description=(
-                    "Record an MP4 video with audio of a Godot project or scene."
+                    "Record a video of a Godot project or scene. "
+                    "Produces an MP4 if ffmpeg is installed; "
+                    "otherwise keeps raw PNG frames and audio. "
                     "Optionally animate the camera along AI-defined waypoints."
-                    "Requires ffmpeg to be installed."
                 ),
                 input_schema={
                     "type": "object",

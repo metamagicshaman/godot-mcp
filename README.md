@@ -67,7 +67,7 @@ Tested with **Codex** and **Claude**. Should also work with **LMStudio**, **Open
 
 - **Run with Profiler** (`godot_run_with_profiler`): Runs a Godot project or a specific scene with the built-in profiler to capture detailed performance data, including fps, frame_time_ms, process_time_ms, physics_time_ms, physics_frame_time_ms, navigation_process_ms, memory_static_bytes, object_count, resource_count, node_count, orphan_node_count, physics_2d_active_objects, physics_2d_collision_pairs, physics_2d_island_count, physics_3d_active_objects, physics_3d_collision_pairs, physics_3d_island_count, and audio_output_latency_ms.
 
-- **Record Video** ( godot_record_video ): Runs a scene for a set duration, captures frames and audio and encodes the result to an .mp4 via ffmpeg. Accepts an optional camera_waypoints array (position, rotation, and FOV per keyframe).
+- **Record Video** ( godot_record_video ): Runs a scene for a set duration, captures frames and audio and encodes the result to an .mp4 via ffmpeg if available. Accepts an optional camera_waypoints array (position, rotation, and FOV per keyframe).
 
 
 The server also exposes MCP resource discovery over stdio, so clients can inspect a static tool catalog resource and a per-tool detail template without needing to call the tools first.
@@ -77,7 +77,7 @@ The server also exposes MCP resource discovery over stdio, so clients can inspec
 - Python 3.10+
 - Godot 4.5 or newer
 
-- ffmpeg (optional)
+- FFmpeg (optional)
 
 Godot can be supplied either:
 

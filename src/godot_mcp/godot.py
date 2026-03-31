@@ -2798,11 +2798,6 @@ class GodotController:
             raise GodotError("`fps` must be at least 1.")
 
         ffmpeg_path = shutil.which("ffmpeg")
-        if ffmpeg_path is None:
-            raise GodotError(
-                "ffmpeg is required but was not found on PATH. "
-                "Install ffmpeg and try again."
-            )
 
         absolute_scene_path: Path | None = None
         resource_scene_path: str | None = None
@@ -2923,7 +2918,38 @@ class GodotController:
                 f"{details or 'No output was returned.'}"
             )
 
-        
+        has_audio = wav_path.exists() and wav_path.stat().st_size > 0
+        warnings: list[str] = []
+
+        if ffmpeg_path is None:
+            warnings.append(
+                "ffmpeg was not found on PATH. "
+                "Skipping video encoding. Raw frames have been kept. "
+                
+            )
+            frame_paths = [str(f) for f in frame_files]
+
+            return {
+                "project_path": str(project_dir),
+                "scene_path": str(absolute_scene_path) if absolute_scene_path is not None else None,
+                "scene_resource_path": resource_scene_path,
+                "run_target": run_target,
+                "duration": duration,
+                "fps": fps,
+                "frame_count": frame_count,
+                "output_format": "frames",
+                "frame_paths": frame_paths,
+                "frame_dir": str(recordings_dir),
+                "audio_path": str(wav_path) if has_audio else None,
+                "has_audio": has_audio,
+                "camera_waypoints_count": len(camera_waypoints) if camera_waypoints else 0,
+                "command": command_with_capture,
+                "log_path": str(log_path),
+                "godot_executable": str(executable),
+                "godot_version": version,
+                "warnings": warnings,
+            }
+
         frame_pattern = str(recordings_dir / f"{stem}%08d.png")
 
         ffmpeg_command: list[str] = [
@@ -2935,7 +2961,7 @@ class GodotController:
             frame_pattern,
         ]
 
-        if wav_path.exists() and wav_path.stat().st_size > 0:
+        if has_audio:
             ffmpeg_command.extend([
                 "-i",
                 str(wav_path),
@@ -2983,9 +3009,6 @@ class GodotController:
                 f"{details or 'No output was returned.'}"
             )
 
-        has_audio = wav_path.exists() and wav_path.stat().st_size > 0
-
-        # Clean up 
         for frame_path in frame_files:
             frame_path.unlink(missing_ok=True)
         movie_output_path.unlink(missing_ok=True)
@@ -3001,8 +3024,8 @@ class GodotController:
             "duration": duration,
             "fps": fps,
             "frame_count": frame_count,
+            "output_format": "mp4",
             "video_path": str(final_video_path),
-            "video_format": "mp4",
             "video_size_bytes": video_size,
             "has_audio": has_audio,
             "camera_waypoints_count": len(camera_waypoints) if camera_waypoints else 0,
@@ -3010,6 +3033,7 @@ class GodotController:
             "log_path": str(log_path),
             "godot_executable": str(executable),
             "godot_version": version,
+            "warnings": warnings,
         }
 
 
